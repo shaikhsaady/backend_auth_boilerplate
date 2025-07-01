@@ -686,10 +686,12 @@ export const socialLogin = async (req, res, next) => {
         provider: verifiedToken.provider,
         deviceTokens: deviceToken ? [deviceToken] : [],
         lastVerified: Date.now(),
-        profilePic: {
-          url: verifiedToken.profilePic,
-          publicId: "",
-        },
+        profilePic: verifiedToken.profilePic
+          ? {
+              url: verifiedToken.profilePic,
+              publicId: "",
+            }
+          : null,
         socialInfo: [
           {
             provider: verifiedToken.provider,

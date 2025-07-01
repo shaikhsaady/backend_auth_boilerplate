@@ -1,15 +1,20 @@
 import { OAuth2Client } from "google-auth-library";
 import axios from "axios";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 // Environment configuration with validation
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const FB_APP_ID = process.env.FB_APP_ID;
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
+const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID;
 
 // Validate environment variables
-[GOOGLE_CLIENT_ID, FB_APP_ID, FB_APP_SECRET].forEach((secret) => {
-  if (!secret) throw new Error(`${secret} environment variable is not defined`);
-});
+[GOOGLE_CLIENT_ID, FB_APP_ID, FB_APP_SECRET, APPLE_CLIENT_ID].forEach(
+  (secret) => {
+    if (!secret)
+      throw new Error(`${secret} environment variable is not defined`);
+  }
+);
 
 // Google client
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -101,6 +106,42 @@ export async function verifySocialToken(provider, token) {
         provider: provider.toLowerCase(),
         firstName: parts[0],
         lastName: parts.slice(1).join(" "),
+      };
+    }
+
+    // Apple
+    case "apple": {
+      // Fetch Apple's public keys
+      const JWKS = createRemoteJWKSet(
+        new URL("https://appleid.apple.com/auth/keys")
+      );
+
+      // Validate JWKS
+      if (!JWKS) {
+        throw new Error("Invalid Apple token");
+      }
+
+      // Verify and decode token
+      const { payload } = await jwtVerify(token, JWKS, {
+        issuer: "https://appleid.apple.com",
+        audience: APPLE_CLIENT_ID,
+      });
+
+      // Validate payload
+      if (!payload) {
+        throw new Error("Invalid Apple token");
+      }
+
+      // Return profile
+      return {
+        social_id: payload.sub,
+        email: payload.email,
+        email_verified: payload.email_verified,
+        fullName: null,
+        profilePic: null,
+        provider: provider.toLowerCase(),
+        firstName: null,
+        lastName: null,
       };
     }
 
