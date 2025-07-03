@@ -130,8 +130,7 @@ const userSchema = new Schema(
       select: false,
     },
     jti: {
-      type: String, // JWT ID
-      unique: true,
+      type: [String],
       select: false,
     },
   },

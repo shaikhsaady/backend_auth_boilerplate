@@ -42,6 +42,7 @@ export const generateAuthToken = async (user) => {
     const accessToken = await signAsync(
       {
         _id: user._id,
+        jti,
       },
       ACCESS_TOKEN_SECRET,
       {
