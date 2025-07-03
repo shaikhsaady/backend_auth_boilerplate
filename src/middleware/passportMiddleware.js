@@ -61,7 +61,7 @@ export default async function passportMiddleware(req, res, next) {
         message: "Invalid session. Please log in again.",
       });
     }
-
+    
     // 4. Check if jti is present in the database
     const user = await User.findById(decoded._id).select("+jti -password -__v");
 
@@ -81,8 +81,8 @@ export default async function passportMiddleware(req, res, next) {
       });
     }
 
-    // remove jti from user
-    user._doc.jti = undefined;
+    // replace jti from user with current jti
+    user._doc.jti = decoded.jti;
 
     // 5. Attach user to request
     req.user = user;

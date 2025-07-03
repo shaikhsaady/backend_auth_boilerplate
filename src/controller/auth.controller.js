@@ -239,7 +239,8 @@ export const otpVerify = async (req, res, next) => {
       user._id,
       {
         $unset: { otpVerification: 1 },
-        $set: { isVerified: true, lastVerified: currentTime, jti },
+        $set: { isVerified: true, lastVerified: currentTime },
+        $push: { jti },
       },
       { new: true, select: "-password -__v" }
     ).lean();
@@ -364,7 +365,7 @@ export const login = async (req, res, next) => {
     }
 
     // Find user by email with password
-    const user = await User.findOne({ email }).select("+password");
+    const user = await User.findOne({ email }).select("+password +jti");
 
     // User not found
     if (!user) {
@@ -374,6 +375,12 @@ export const login = async (req, res, next) => {
       });
     }
 
+    if (user.jti.length >= 4) {
+      return res.status(401).json({
+        success: false,
+        message: "You can only login on max 4 devices.",
+      });
+    }
     // check if password is not exists
     if (!user.password) {
       return res.status(401).json({
@@ -414,8 +421,7 @@ export const login = async (req, res, next) => {
     const updatedUser = await User.findByIdAndUpdate(
       user._id,
       {
-        $push: { deviceTokens: deviceToken },
-        $set: { jti },
+        $push: { deviceTokens: deviceToken, jti },
       },
       {
         new: true,
@@ -535,13 +541,12 @@ export const logout = async (req, res, next) => {
         message: "User not authenticated.",
       });
     }
-
+    
     // find user by id
     await User.findByIdAndUpdate(
       req.user._id,
       {
-        $pull: { deviceTokens: { $in: [deviceToken] } },
-        $unset: { jti: 1 },
+        $pull: { deviceTokens: { $in: [deviceToken] }, jti: req.user.jti },
       },
       { new: true }
     );
@@ -595,7 +600,7 @@ export const refreshAccessToken = async (req, res, next) => {
     // check if user exists
     const user = await User.findOne({
       _id: decoded._id,
-      jti: decoded.jti,
+      jti: { $in: [decoded.jti] },
     });
 
     //  user not found
@@ -614,7 +619,10 @@ export const refreshAccessToken = async (req, res, next) => {
     // Update user
     await User.findByIdAndUpdate(
       user._id,
-      { $set: { jti } },
+      {
+        $pull: { jti: decoded.jti }, // Remove the old 'decoded.jti' from the array
+        $push: { jti: jti },
+      },
       { new: true, select: "-password -__v" }
     );
 
@@ -673,7 +681,7 @@ export const socialLogin = async (req, res, next) => {
     // find user by email
     let user = await User.findOne({
       email: verifiedToken.email,
-    }).select("+socialInfo");
+    }).select("+socialInfo +jti");
 
     // if user is not found
     if (!user) {
@@ -707,6 +715,12 @@ export const socialLogin = async (req, res, next) => {
       user = newUser;
     }
 
+    if (user.jti.length >= 4) {
+      return res.status(400).json({
+        success: false,
+        message: "You can only login on max 4 devices.",
+      });
+    }
     // generate token
     const { accessToken, refreshToken, jti } = await generateAuthToken({
       _id: user._id,
@@ -715,8 +729,10 @@ export const socialLogin = async (req, res, next) => {
     // Prepare update operations
     const updateOps = {
       $set: {
-        jti,
         provider: verifiedToken.provider,
+      },
+      $push: {
+        jti: jti,
       },
     };
 
@@ -732,11 +748,9 @@ export const socialLogin = async (req, res, next) => {
 
     // Add new provider if not exists
     if (!providerExists) {
-      updateOps.$push = {
-        socialInfo: {
-          provider: verifiedToken.provider,
-          socialId: verifiedToken.social_id,
-        },
+      updateOps.$push.socialInfo = {
+        provider: verifiedToken.provider,
+        socialId: verifiedToken.social_id,
       };
     }
 
